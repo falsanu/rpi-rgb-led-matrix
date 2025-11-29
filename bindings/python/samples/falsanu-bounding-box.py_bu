@@ -1,0 +1,191 @@
+#!/usr/bin/env python
+from samplebase import SampleBase
+from datetime import datetime
+from rgbmatrix import graphics
+import time
+import random
+import math
+
+# Current date time in local system
+
+
+class CollisionBox:
+    def __init__(self, x, y, width, height):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+
+    def collides_with(self, pixel_x, pixel_y, pixel_size=1):
+        pixel_right = pixel_x + pixel_size
+        pixel_bottom = pixel_y + pixel_size
+        return (
+            pixel_x < self.x + self.width and
+            pixel_right > self.x and
+            pixel_y < self.y + self.height and
+            pixel_bottom > self.y
+        )
+
+class StackedPixel:
+    def __init__(self, x, y, size, brightness, color):
+        self.x = x
+        self.y = y
+        self.size = size
+        self.brightness = brightness
+        self.color = color
+
+
+class SimpleSquare(SampleBase):
+    def __init__(self, *args, **kwargs):
+        super(SimpleSquare, self).__init__(*args, **kwargs)
+        self.brightness = 0.2
+
+    def set_brightness(self, brightness):
+        """Setzt die Helligkeit der Pixel (0.0–1.0)."""
+        self.brightness = max(0.0, min(1.0, brightness))
+
+
+    def run(self):
+
+        falling_pixels = []
+
+        stacked_pixels = []
+
+        density = 1
+        num_pixels = 1500
+        pixel_duration_seconds = 1.0  # in Sekunden
+        
+        offset_canvas = self.matrix.CreateFrameCanvas()
+        
+        
+        width = offset_canvas.width
+        height = offset_canvas.height
+        font = graphics.Font()
+        font.LoadFont("../../../fonts/9x18B.bdf")
+
+        r = int(220)
+        g = int(150)
+        b = int(0)
+
+        font_width = 8*9;
+        font_height = 18;
+        text_color = graphics.Color(r, g, b)
+        pos_x = offset_canvas.width // 2 - (font_width//2)
+        pos_y = offset_canvas.height - offset_canvas.height//4 
+        box_width = font_width + 4;
+        box_height = font_height + 4;
+        box_x = offset_canvas.width//2 - (box_width/2)
+        box_y = offset_canvas.height//2 - (box_height/2)
+
+
+        clock_box = CollisionBox(pos_x, pos_y, box_width, box_height)
+
+        while True:
+            offset_canvas.Clear()
+            
+
+            # Entferne Pixel, deren Anzeigedauer abgelaufen ist
+            current_time = time.time()
+            falling_pixels = [(x, y,start_y, color, start_time, duration, _,_) 
+                            for (x, y,start_y, color, start_time, duration,_,_) in falling_pixels
+                            if current_time - start_time < duration]
+
+           
+
+
+            # Füge neue Pixel hinzu, falls weniger als num_pixels aktiv sind
+            # Füge neue fallende Pixels hinzu
+
+            while len(falling_pixels) < num_pixels:
+                x = random.randint(0, width - 1)
+#                y = random.randint(0, height - 1)
+                # Zufällige Farbnuancen im warmen Orange-Bereich
+                # R: 220–255, G: 100–180, B: 0–50
+                r = random.randint(220, 255)
+                g = random.randint(100, 180)
+                b = random.randint(0, 50)
+                
+#                if random.choice([True, False]):
+#                    r = random.randint(230,255)
+#                    g = random.randint(230,255)
+#                    b = random.randint(230,255)       
+#                else:
+#                    r = random.randint(163,190)
+#                    g = random.randint(35,65)
+#                    b = random.randint(10,30)
+                
+                max_brightness = random.uniform(0.7, 1.0)
+
+                r = int(r * self.brightness)
+                g = int(g * self.brightness)
+                b = int(b * self.brightness)
+
+                color = graphics.Color(r, g, b)
+                
+                duration = random.uniform(1, 5.0)
+
+                start_y = random.randint(0, offset_canvas.height )
+                fall_speed = random.uniform(1.5, 2.5)
+
+                
+                falling_pixels.append((x, start_y,start_y, color, current_time, duration, max_brightness, fall_speed))
+
+
+
+            new_falling_pixels = []
+
+            for (x, y, start_y, color, start_time, duration, max_brightness, fall_speed) in falling_pixels:
+                
+                elapsed = current_time - start_time
+                y = start_y + (elapsed * fall_speed)
+                
+                if clock_box.collides_with(x, y, 1):
+                    stacked_pixels.append((x, y, color, current_time, duration, max_brightness, fall_speed))
+                else:
+
+
+                    progress = (current_time - start_time) / duration
+
+                
+                    # Fading-Kurve: Aufleuchten (0.0–0.5), Ausblenden (0.5–1.0)
+                    if progress < 0.5:
+                        # Aufleuchten (sinusförmig für sanften Übergang)
+                        brightness = math.sin(progress * math.pi) * max_brightness
+                    else:
+                        # Ausblenden (sinusförmig für sanften Übergang)
+                        brightness = math.sin((1.0 - progress) * math.pi) * max_brightness
+
+
+                # Basis-Orange-Farbe (hell und warm)
+                    r = int(color.red * brightness)
+                    g = int(color.green * brightness)
+                    b = int(color.blue  * brightness)
+
+                    offset_canvas.SetPixel(int(x), int(y), r, g, b)
+
+                    new_falling_pixels.append((x, start_y, color, current_time, duration, max_brightness, fall_speed))
+            
+            falling_pixels = new_falling_pixels
+
+
+            stacked_pixels.sort(key=lambda p:p.y)
+            for pixel in stacked_pixels:
+                r = int(pixel.color.red * brightness)
+                g = int(pixel.color.green * brightness)
+                b = int(pixel.color.blue * brightness)
+                offset_canvas.SetPixel(pixel.x, pixel.y, r, g, b)
+
+            # draw clock
+            graphics.DrawText(offset_canvas, font, posX, posY, textColor, datetime.now().strftime("%H:%M:%S"))
+
+            # drawBox
+            time.sleep(0.03)
+
+            offset_canvas = self.matrix.SwapOnVSync(offset_canvas)
+
+
+# Main function
+if __name__ == "__main__":
+    simple_square = SimpleSquare()
+    if (not simple_square.process()):
+        simple_square.print_help()
