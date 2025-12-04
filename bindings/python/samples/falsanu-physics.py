@@ -19,6 +19,10 @@ def get_random_color():
     r = random.randint(0,255)
     g = random.randint(0,255)
     b = random.randint(0,255)
+
+    r = random.randint(220, 255)
+    g = random.randint(100, 180)
+    b = random.randint(0, 50)
     return graphics.Color(r, g, b)
 
 class Pixel():
@@ -35,42 +39,36 @@ class Pixel():
     def collide(self, other):
         
 
-        di = dist(self.position.x, self.position.y, other.position.x, other.position.y)
-        p = other.position
-        impact_vector = p.sub(self.position)
+        impact_vector = other.position.sub(self.position)
         d = impact_vector.mag()
-
         r = self.r + other.r
+
         if d < r:
             self.change_color()
-            overlap = d - (self.r + other.r)
-            dir = impact_vector
-            dir.set_mag(overlap * 0.5)
-            self.position.add(dir)
-            other.position.sub(dir)
-
-            d = self.r + other.r
-            impact_vector.set_mag(d)
-
-
-
+            
+            #Normalisieren des Impact Vektors
+            impact_vector_normalized = Vector(impact_vector.x, impact_vector.y)
+            impact_vector_normalized.div(d)
+            # Geschwindigkeitsdifferenz
+            v_diff = other.vel.sub(self.vel)
+            num = v_diff.dot(impact_vector_normalized)
             mass_sum = self.mass + other.mass
-            p = other.position
-            v = other.vel
-            vDiff = v.sub(self.vel)
 
-            # self
-            num =  vDiff.dot(impact_vector)
-            den = mass_sum * d * d
-            delta_v_a = impact_vector
-            delta_v_a.mult(2 * other.mass * num / den)
+            #Impulserhaltung: geschwindigkeitsänderung für self
+            delta_v_a = Vector(impact_vector_normalized.x, impact_vector_normalized.y)
+            delta_v_a.mult(2*other.mass * num / mass_sum)
             self.vel.add(delta_v_a)
-
-        #other
-            delta_v_b = impact_vector
-            delta_v_b.mult(-2 * self.mass * num / den)
+            #Impulserhaltung: Geschwindigkeitsänderung für other
+            delta_v_b = Vector(impact_vector_normalized.x, impact_vector_normalized.y)
+            delta_v_b.mult(-2 * self.mass * num/mass_sum)
             other.vel.add(delta_v_b)
 
+            # Position korrigieren um überlagerung zu vermeiden
+            overlap = r - d
+            dir = Vector(impact_vector_normalized.x, impact_vector_normalized.y)
+            dir.mult(overlap*0.5)
+            self.position.sub(dir)
+            other.position.add(dir)
 
     def change_color(self):
         self.color = get_random_color()
@@ -84,9 +82,9 @@ class Pixel():
 
     def draw_circle(self, canvas):
         """Zeichnet einen Kreis mit dem Mittelpunkt (center_x, center_y) und dem Radius."""
-        for dx in range(-self.r//2, self.r//2 + 1):
-            for dy in range(-self.r//2, self.r//2 + 1):
-                if dx * dx + dy * dy <= self.r//2 * self.r//2:  # Prüfe, ob der Punkt innerhalb des Kreises liegt
+        for dx in range(-self.r, self.r + 1):
+            for dy in range(-self.r, self.r + 1):
+                if dx * dx + dy * dy <= self.r * self.r:  # Prüfe, ob der Punkt innerhalb des Kreises liegt
                     nx, ny = self.position.x + dx, self.position.y + dy
                     if 0 <= nx < self.canvas_w and 0 <= ny < self.canvas_h:
                         canvas.SetPixel(nx, ny,  self.color.red, self.color.green, self.color.blue)
@@ -108,15 +106,30 @@ class Pixel():
         return False
 
     def calc(self):
+        
+        #self.vel.x *= 0.99  # 1% Geschwindigkeitsverlust pro Frame
+        #self.vel.y *= 0.99
+        
         self.vel.add(self.acc)
         self.vel.limit(10)
         self.position.x = self.position.x + self.vel.x
         self.position.y = self.position.y + self.vel.y
 
-        if self.position.x + 1 + self.r > self.canvas_w or self.position.x-1-self.r < 0:
-            self.vel.x = self.vel.x * -1
-        if self.position.y + 1 + self.r > self.canvas_h or self.position.y-1-self.r < 0:
-            self.vel.y = self.vel.y * -1
+        # Korrigiere Position und Geschwindigkeit bei Randberührung
+        if self.position.x + self.r > self.canvas_w:
+            self.position.x = self.canvas_w - self.r  # Setze genau an den Rand
+            self.vel.x *= -1
+        elif self.position.x - self.r < 0:
+            self.position.x = self.r  # Setze genau an den Rand
+            self.vel.x *= -1
+
+        if self.position.y + self.r > self.canvas_h:
+            self.position.y = self.canvas_h - self.r  # Setze genau an den Rand
+            self.vel.y *= -1
+        elif self.position.y - self.r < 0:
+            self.position.y = self.r  # Setze genau an den Rand
+            self.vel.y *= -1
+
 
         self.acc.x = 0
         self.acc.y = 0
@@ -124,7 +137,7 @@ class Pixel():
 
     def applyForce(self, force):
         f = force
-        f.div(self.size)
+        f.div(self.mass)
         self.acc.add(f)
 
 
@@ -153,7 +166,7 @@ class Vector():
         return self.x * b.x + self.y * b.y
 
     def mag(self):
-        return self.x * self.x + self.y * self.y
+        return math.sqrt(self.x * self.x + self.y * self.y)
 
     def set_mag(self, new_mag):
         current_mag = self.mag()
@@ -177,7 +190,7 @@ class PhysicsEngine(SampleBase):
 
 
     def run(self):
-        num_pixels = 30
+        num_pixels = 10
         offset_canvas = self.matrix.CreateFrameCanvas()
         width = offset_canvas.width
         height = offset_canvas.height
@@ -191,11 +204,13 @@ class PhysicsEngine(SampleBase):
             
             offset_canvas.Clear()
             current_time = time.time()
-            forceV = Vector(0,0.1)
+            forceV = Vector(0,1)
            
 
             for i in range(len(pixels)):
+
                 particle_a = pixels[i]
+                particle_a.applyForce(forceV)
                 for j in range(i + 1, len(pixels)):
                     particle_b = pixels[j]
                     particle_a.collide(particle_b)
@@ -204,7 +219,7 @@ class PhysicsEngine(SampleBase):
                 pixel.calc()
                 pixel.draw_circle(offset_canvas)
 
-            time.sleep(0.02)
+            time.sleep(0.01)
             offset_canvas = self.matrix.SwapOnVSync(offset_canvas)
 
 if __name__ == "__main__":
