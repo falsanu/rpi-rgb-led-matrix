@@ -28,8 +28,8 @@ def get_random_color():
 class Pixel():
     def __init__(self, position, size, vel, acc, canvas_w, canvas_h):
         self.position = position
-        self.mass = random.randint(2,4)  #same as mass
-        self.r = int(math.sqrt(self.mass)*3)
+        self.mass = random.randint(1,4)  #same as mass
+        self.r = int(math.sqrt(self.mass)*1)
         self.vel = Vector(random.uniform(-1,1), random.uniform(-1,1))
         self.acc = Vector(-1,1)
         self.canvas_w = canvas_w
@@ -90,6 +90,28 @@ class Pixel():
                         canvas.SetPixel(nx, ny,  self.color.red, self.color.green, self.color.blue)
         canvas.SetPixel(self.position.x, self.position.y, 0 , 0 , 0 )
 
+    def draw_circle_a(self, canvas):
+        center_x, center_y = int(self.position.x), int(self.position.y)
+        r_squared = (self.r // 2) ** 2
+        for dx in range(-self.r//2, self.r//2 + 1):
+            for dy in range(-self.r//2, self.r//2 + 1):
+                # Abstand zum Mittelpunkt
+                distance_squared = dx*dx + dy*dy
+                if distance_squared <= r_squared:
+                    # Pixel liegt innerhalb des Kreises
+                    nx, ny = center_x + dx, center_y + dy
+                    if 0 <= nx < self.canvas_w and 0 <= ny < self.canvas_h:
+                        # Anti-Aliasing: Helligkeit basierend auf Abstand zum Rand
+                        if abs(distance_squared - r_squared) < self.r//4:
+                            # Pixel nahe am Rand: Helligkeit reduzieren
+                            alpha = 1.0 - (distance_squared / r_squared)  # 0.0 (Rand) bis 1.0 (Mitte)
+                            r = int(self.color.red * alpha)
+                            g = int(self.color.green * alpha)
+                            b = int(self.color.blue * alpha)
+                            canvas.SetPixel(nx, ny, r, g, b)
+                        else:
+                            # Vollfarbe für Pixel im Inneren
+                            canvas.SetPixel(nx, ny, self.color.red, self.color.green, self.color.blue)
 
     def draw_pixel(self, canvas):
         canvas.SetPixel(self.position.x, self.position.y,  self.color.red, self.color.green, self.color.blue)
@@ -190,7 +212,7 @@ class PhysicsEngine(SampleBase):
 
 
     def run(self):
-        num_pixels = 10
+        num_pixels = 60
         offset_canvas = self.matrix.CreateFrameCanvas()
         width = offset_canvas.width
         height = offset_canvas.height
@@ -217,7 +239,7 @@ class PhysicsEngine(SampleBase):
 
             for pixel in pixels:
                 pixel.calc()
-                pixel.draw_circle(offset_canvas)
+                pixel.draw_circle_a(offset_canvas)
 
             time.sleep(0.01)
             offset_canvas = self.matrix.SwapOnVSync(offset_canvas)
